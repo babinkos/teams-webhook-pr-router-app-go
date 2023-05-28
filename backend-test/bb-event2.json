@@ -1,0 +1,159 @@
+{
+    "date": "2019-11-20T10:31:54-0800",
+    "actor": {
+        "name": "admin",
+        "emailAddress": "admin@example.com",
+        "id": 1,
+        "displayName": "Administrator",
+        "active": true,
+        "slug": "admin",
+        "type": "NORMAL",
+        "links": {
+            "self": [
+                {
+                    "href": "http: //localhost:7990/bitbucket/users/admin"
+                }
+            ]
+        },
+        "avatarUrl": "https: //secure.gravatar.com/avatar/e64c7d89f26bd1972efa854d13d7dd61.jpg?s\u003d64\u0026d\u003dmm"
+    },
+    "pullRequest": {
+        "id": 2,
+        "version": 0,
+        "title": "add_file.txt edited online with Bitbucket",
+        "description": "a",
+        "state": "OPEN",
+        "open": true,
+        "closed": false,
+        "createdDate": 1574317913743,
+        "updatedDate": 1574317913743,
+        "fromRef": {
+            "id": "refs/heads/admin/add_filetxt-1574317875130",
+            "displayId": "admin/add_filetxt-1574317875130",
+            "latestCommit": "2b9cff39d08fad011ab3607836988760b30f66e1",
+            "repository": {
+                "slug": "rep_1",
+                "id": 1,
+                "name": "rep_1",
+                "scmId": "git",
+                "state": "AVAILABLE",
+                "statusMessage": "Available",
+                "forkable": true,
+                "project": {
+                    "key": "PROJECT_1",
+                    "id": 1,
+                    "name": "Project 1",
+                    "description": "Default configuration project #1",
+                    "public": false,
+                    "type": "NORMAL",
+                    "links": {
+                        "self": [
+                            {
+                                "href": "http://localhost:7990/bitbucket/projects/PROJECT_1"
+                            }
+                        ]
+                    },
+                    "avatarUrl": "/bitbucket/projects/PROJECT_1/avatar.png?s\u003d64\u0026v\u003d1542341450256"
+                },
+                "public": false,
+                "links": {
+                    "clone": [
+                        {
+                            "href": "http: //localhost:7990/bitbucket/scm/project_1/rep_1.git",
+                            "name": "http"
+                        },
+                        {
+                            "href": "ssh://git@localhost:7999/project_1/rep_1.git",
+                            "name": "ssh"
+                        }
+                    ],
+                    "self": [
+                        {
+                            "href": "http://localhost:7990/bitbucket/projects/PROJECT_1/repos/rep_1/browse"
+                        }
+                    ]
+                }
+            }
+        },
+        "toRef": {
+            "id": "refs/heads/master",
+            "displayId": "master",
+            "latestCommit": "0a943a29376f2336b78312d99e65da17048951db",
+            "repository": {
+                "slug": "rep_1",
+                "id": 1,
+                "name": "rep_1",
+                "scmId": "git",
+                "state": "AVAILABLE",
+                "statusMessage": "Available",
+                "forkable": true,
+                "project": {
+                    "key": "PROJECT_1",
+                    "id": 1,
+                    "name": "Project 1",
+                    "description": "Default configuration project #1",
+                    "public": false,
+                    "type": "NORMAL",
+                    "links": {
+                        "self": [
+                            {
+                                "href": "http: //localhost:7990/bitbucket/projects/PROJECT_1"
+                            }
+                        ]
+                    },
+                    "avatarUrl": "/bitbucket/projects/PROJECT_1/avatar.png?s\u003d64\u0026v\u003d1542341450256"
+                },
+                "public": false,
+                "links": {
+                    "clone": [
+                        {
+                            "href": "http: //localhost: 7990/bitbucket/scm/project_1/rep_1.git",
+                            "name": "http"
+                        },
+                        {
+                            "href": "ssh: //git@localhost:7999/project_1/rep_1.git",
+                            "name": "ssh"
+                        }
+                    ],
+                    "self": [
+                        {
+                            "href": "http://localhost:7990/bitbucket/projects/PROJECT_1/repos/rep_1/browse"
+                        }
+                    ]
+                }
+            }
+        },
+        "locked": false,
+        "author": {
+            "user": {
+                "name": "admin",
+                "emailAddress": "admin@example.com",
+                "id": 1,
+                "displayName": "Administrator",
+                "active": true,
+                "slug": "admin",
+                "type": "NORMAL",
+                "links": {
+                    "self": [
+                        {
+                            "href": "http: //localhost:7990/bitbucket/users/admin"
+                        }
+                    ]
+                },
+                "avatarUrl": "https://secure.gravatar.com/avatar/e64c7d89f26bd1972efa854d13d7dd61.jpg?s\u003d64\u0026d\u003dmm"
+            },
+            "role": "AUTHOR",
+            "approved": false,
+            "status": "UNAPPROVED"
+        },
+        "reviewers": [],
+        "participants": [],
+        "links": {
+            "self": [
+                {
+                    "href": "http: //localhost:7990/bitbucket/projects/PROJECT_1/repos/rep_1/pull-requests/2"
+                }
+            ]
+        }
+    }
+}

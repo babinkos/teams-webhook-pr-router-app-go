@@ -70,7 +70,7 @@ func main() {
 			id1 := fmt.Sprintf("%x", sha256.Sum256([]byte(c.Params("id1"))))
 			id2 := fmt.Sprintf("%x", sha256.Sum256([]byte(c.Params("id2"))))
 			id3 := fmt.Sprintf("%x", sha256.Sum256([]byte(c.Params("id3"))))
-			newPath := fmt.Sprintf("/webhookb2/%s/IncomingWebhook/%s/%s", id1, id2, id3)
+			newPath := fmt.Sprintf("/webhookb2/%s/IncomingWebhook/%s/%s", id1[0:7], id2[0:7], id3[0:7])
 			c.Path(newPath)
 		}
 

@@ -33,22 +33,22 @@ func main() {
 	app.Get("/healthz", func(c *fiber.Ctx) error {
 		return c.SendStatus(204)
 	})
-	type SomeStruct struct {
-		HookIDs      string
-		OriginalBody string
-	}
+	// type SomeStruct struct {
+	// 	HookIDs string
+	// 	// OriginalBody string
+	// }
 
 	// POST /webhookb2/uid1@uid2/IncomingWebhook/uid3/uid4
 	app.All("/webhookb2/:id1/IncomingWebhook/:id2/:id3", func(c *fiber.Ctx) error {
 		c.Accepts("application/json") // "application/json"
 		c.AcceptsEncodings("compress", "br")
-		data := SomeStruct{
-			HookIDs:      fmt.Sprintf("%s, %s, %s", c.Params("id1"), c.Params("id2"), c.Params("id3")),
-			OriginalBody: fmt.Sprintf("%s", c.Body()),
-		}
+		// data := SomeStruct{
+		// 	HookIDs: fmt.Sprintf("%s, %s, %s", c.Params("id1"), c.Params("id2"), c.Params("id3")),
+		// 	OriginalBody: fmt.Sprintf("%s", c.Body()),
+		// }
 		fmt.Println(fmt.Sprintf("DEBUG: hook ids: %s, %s, %s ; body: %s", c.Params("id1"), c.Params("id2"), c.Params("id3"), c.Body()))
-		// msg := fmt.Sprintf("👴 %s is %s years old", c.Params("name"), c.Params("age"))
-		return c.JSON(data) // => 👴 john is 75 years old
+		// return c.JSON(data)
+		return c.SendStatus(200)
 	})
 
 	log.Fatal(app.Listen(":3000"))

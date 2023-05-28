@@ -1,25 +1,39 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/gofiber/fiber/v2/utils"
+	"github.com/romana/rlog"
 )
 
 func main() {
 	app := fiber.New()
 
-	// app.Use(requestid.New())
-	// app.Use(logger.New(logger.Config{
-	// 	// For more options, see the Config section
-	// 	Format: "${pid} ${locals:requestid} ${status} - ${method} ${path}​\n",
-	// }))
+	os.Setenv("RLOG_LOG_STREAM", "stdout")
+	rlog.UpdateEnv()
+	var logLevel string = os.Getenv("RLOG_LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "INFO"
+	}
+	rlog.Info("RLOG_LOG_LEVEL: ", logLevel)
+
+	app.Use(requestid.New(requestid.Config{
+		Next:       nil,
+		Header:     fiber.HeaderXRequestID,
+		Generator:  utils.UUIDv4,
+		ContextKey: "requestid",
+	}))
 
 	app.Use(logger.New(logger.Config{
-		Format: "[${ip}]:${port} ${status} - ${method} ${path}\n",
+		Format: "[${time}] [${ip}]:${port} ${locals:requestid} ${status} - ${latency} ${bytesReceived} ${method} ${path}\n",
 	}))
 
 	app.Use(compress.New(compress.Config{
@@ -29,26 +43,36 @@ func main() {
 		Level: compress.LevelBestSpeed, // 1
 	}))
 
+	type SomeStruct struct {
+		RequestID string
+	}
+
 	// GET /healthz
 	app.Get("/healthz", func(c *fiber.Ctx) error {
 		return c.SendStatus(204)
 	})
-	// type SomeStruct struct {
-	// 	HookIDs string
-	// 	// OriginalBody string
-	// }
 
 	// POST /webhookb2/uid1@uid2/IncomingWebhook/uid3/uid4
 	app.All("/webhookb2/:id1/IncomingWebhook/:id2/:id3", func(c *fiber.Ctx) error {
 		c.Accepts("application/json") // "application/json"
 		c.AcceptsEncodings("compress", "br")
-		// data := SomeStruct{
-		// 	HookIDs: fmt.Sprintf("%s, %s, %s", c.Params("id1"), c.Params("id2"), c.Params("id3")),
-		// 	OriginalBody: fmt.Sprintf("%s", c.Body()),
-		// }
-		fmt.Println(fmt.Sprintf("DEBUG: hook ids: %s, %s, %s ; body: %s", c.Params("id1"), c.Params("id2"), c.Params("id3"), c.Body()))
-		// return c.JSON(data)
-		return c.SendStatus(200)
+		data := SomeStruct{
+			RequestID: fmt.Sprintf("%s", c.GetRespHeader("X-Request-Id")),
+		}
+
+		if logLevel != "DEBUG" {
+			// https://docs.gofiber.io/api/ctx#path :
+			// override Path with sha256 encoded webhook credentials
+			id1 := fmt.Sprintf("%x", sha256.Sum256([]byte(c.Params("id1"))))
+			id2 := fmt.Sprintf("%x", sha256.Sum256([]byte(c.Params("id2"))))
+			id3 := fmt.Sprintf("%x", sha256.Sum256([]byte(c.Params("id3"))))
+			newPath := fmt.Sprintf("/webhookb2/%s/IncomingWebhook/%s/%s", id1, id2, id3)
+			c.Path(newPath)
+		}
+
+		rlog.Debug(fmt.Sprintf("hook ids: %s, %s, %s ; body: %s", c.Params("id1"), c.Params("id2"), c.Params("id3"), c.Body()))
+		return c.JSON(data)
+		// return c.SendStatus(200)
 	})
 
 	log.Fatal(app.Listen(":3000"))

@@ -17,8 +17,9 @@ import (
 
 func main() {
 	app := fiber.New(fiber.Config{
-		JSONEncoder: json.Marshal,
-		JSONDecoder: json.Unmarshal,
+		JSONEncoder:           json.Marshal,
+		JSONDecoder:           json.Unmarshal,
+		DisableStartupMessage: true,
 	})
 
 	os.Setenv("RLOG_LOG_STREAM", "stdout")
@@ -79,5 +80,17 @@ func main() {
 		// return c.SendStatus(200)
 	})
 
-	log.Fatal(app.Listen(":3000"))
+	go func() {
+		log.Fatal(app.Listen(":8080"))
+	}()
+
+	appHealth := fiber.New(fiber.Config{
+		DisableStartupMessage: true,
+	})
+	// GET /healthz
+	appHealth.Get("/healthz", func(c *fiber.Ctx) error {
+		return c.SendStatus(204)
+	})
+	log.Fatal(appHealth.Listen(":9000"))
+
 }

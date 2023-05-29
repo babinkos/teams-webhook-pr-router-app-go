@@ -12,5 +12,6 @@ RUN cd webhook-bb-pr-teams-router-app-go/backend-test && go build -v -o /usr/loc
 
 FROM docker.io/debian:bullseye-slim
 COPY --from=build /usr/local/bin/app /usr/local/bin/app
-EXPOSE 3000
+EXPOSE 8080
+EXPOSE 9000
 CMD ["/usr/local/bin/app"]

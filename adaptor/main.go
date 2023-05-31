@@ -1,12 +1,21 @@
-package transform
+package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"fmt"
-	"log"
+	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/goccy/go-json"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/compress"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/gofiber/fiber/v2/utils"
+	"github.com/romana/rlog"
 )
 
 type BitBucketUser struct {
@@ -23,10 +32,6 @@ type BitBucketUser struct {
 		} `json:"self"`
 	} `json:"links"`
 }
-
-// type BitBucketReviewers []struct {
-// 	User BitBucketUser
-// }
 
 type BitBucketReviewers []struct {
 	User     BitBucketUser `json:"user"`
@@ -207,6 +212,7 @@ type TeamsMsg struct {
 	Attachments []TeamsMsgAttachement `json:"attachments"`
 }
 
+// Produce JSON with <> not escaped as unicode
 func (t *TeamsMsg) NonEscapedJSON() ([]byte, error) {
 	buffer := &bytes.Buffer{}
 	encoder := json.NewEncoder(buffer)
@@ -215,11 +221,12 @@ func (t *TeamsMsg) NonEscapedJSON() ([]byte, error) {
 	return buffer.Bytes(), err
 }
 
+// Parse BitBucket PR event json payload, maps data to build Teams notification webhook json
 func ParsePR(eventJson []byte) []byte {
-	// value := "stub"
 	var inventory BitBucketPREvent
 	if err := json.Unmarshal([]byte(eventJson), &inventory); err != nil {
-		log.Fatal(err)
+		rlog.Criticalf("Error Unmarshalling payload JSON : %s", err.Error())
+		os.Exit(1)
 	}
 	var reviewersList string = ""
 	var reviewersEntity ReviewerEntity
@@ -238,10 +245,10 @@ func ParsePR(eventJson []byte) []byte {
 	reviewersEntity.Text = "<at>" + inventory.PullRequest.Author.User.Name + " UPN</at>"
 	reviewersEntityList = append(reviewersEntityList, reviewersEntity) // add PR author to mentions format
 	reviewersList = strings.TrimRight(reviewersList, ", ")
-	// fmt.Printf("%+v\n", reviewersEntityList)
+	rlog.Tracef(0, "%+v\n", reviewersEntityList)
 	bodyText := fmt.Sprintf("Hi Team, %s %s a PR, please review: [%s](%s) \n\n", reviewersEntity.Text, strings.TrimLeft(inventory.EventKey, "pr:"), inventory.PullRequest.Title, inventory.PullRequest.Links.Self[0].Href)
 	bodyText += fmt.Sprintf("CC: %s", reviewersList)
-	fmt.Printf("%s\n", bodyText)
+	rlog.Tracef(0, "%s \n", bodyText)
 
 	var msg TeamsMsg
 	msg.Type = "message"
@@ -268,14 +275,166 @@ func ParsePR(eventJson []byte) []byte {
 
 	b, err := msg.NonEscapedJSON()
 	if err != nil {
-		fmt.Println("error:", err)
+		rlog.Errorf("NonEscapedJSON error: %s", err.Error())
 	}
-	// os.Stdout.Write(b)
 	return b
 }
 
-// func main() {
+func isTraceLevel(tLevel int64) bool {
+	return tLevel >= 0
+}
 
-// 	ParsePR([]byte(`{"eventKey":"pr:opened","date":"2023-05-29T09:19:13-0400","actor":{"name":"kbabin","emailAddress":"kbabin@lenovo.com","id":8902,"displayName":"Konstantin Babin","active":true,"slug":"kbabin","type":"NORMAL","links":{"self":[{"href":"https://bitbucket.tc.lenovo.com/users/kbabin"}]}},"pullRequest":{"id":269,"version":0,"title":"PMP-20074 Dataseeding request for azfdemo org - test notification","state":"OPEN","open":true,"closed":false,"createdDate":1685366353203,"updatedDate":1685366353203,"fromRef":{"id":"refs/heads/feature/PMP-20074-create-scripts-to-initialize-and-update-the-demo-azfdemo-2023-05-17-na","displayId":"feature/PMP-20074-create-scripts-to-initialize-and-update-the-demo-azfdemo-2023-05-17-na","latestCommit":"9e4da367c66845f212567e839743694f6e8439f6","type":"BRANCH","repository":{"slug":"pas-data-generation","id":1006,"name":"pas-data-generation","hierarchyId":"bbd53dac7de24a3aee69","scmId":"git","state":"AVAILABLE","statusMessage":"Available","forkable":true,"project":{"key":"PMP","id":212,"name":"CSW LDI (Lenovo Device Intelligence)","description":"(Formerly PMP Predictive Maintenance)","public":false,"type":"NORMAL","links":{"self":[{"href":"https://bitbucket.tc.lenovo.com/projects/PMP"}]}},"public":false,"links":{"clone":[{"href":"https://bitbucket.tc.lenovo.com/scm/pmp/pas-data-generation.git","name":"http"},{"href":"ssh://git@bitbucket.tc.lenovo.com/pmp/pas-data-generation.git","name":"ssh"}],"self":[{"href":"https://bitbucket.tc.lenovo.com/projects/PMP/repos/pas-data-generation/browse"}]}}},"toRef":{"id":"refs/heads/develop","displayId":"develop","latestCommit":"b496d7bc5618fb20faeed7f9f4559fdde4d42adb","type":"BRANCH","repository":{"slug":"pas-data-generation","id":1006,"name":"pas-data-generation","hierarchyId":"bbd53dac7de24a3aee69","scmId":"git","state":"AVAILABLE","statusMessage":"Available","forkable":true,"project":{"key":"PMP","id":212,"name":"CSW LDI (Lenovo Device Intelligence)","description":"(Formerly PMP Predictive Maintenance)","public":false,"type":"NORMAL","links":{"self":[{"href":"https://bitbucket.tc.lenovo.com/projects/PMP"}]}},"public":false,"links":{"clone":[{"href":"https://bitbucket.tc.lenovo.com/scm/pmp/pas-data-generation.git","name":"http"},{"href":"ssh://git@bitbucket.tc.lenovo.com/pmp/pas-data-generation.git","name":"ssh"}],"self":[{"href":"https://bitbucket.tc.lenovo.com/projects/PMP/repos/pas-data-generation/browse"}]}}},"locked":false,"author":{"user":{"name":"kbabin","emailAddress":"kbabin@lenovo.com","id":8902,"displayName":"Konstantin Babin","active":true,"slug":"kbabin","type":"NORMAL","links":{"self":[{"href":"https://bitbucket.tc.lenovo.com/users/kbabin"}]}},"role":"AUTHOR","approved":false,"status":"UNAPPROVED"},"reviewers":[{"user":{"name":"svaladez","emailAddress":"svaladez@lenovo.com","id":1454,"displayName":"Sergio Valadez Cruz","active":true,"slug":"svaladez","type":"NORMAL","links":{"self":[{"href":"https://bitbucket.tc.lenovo.com/users/svaladez"}]}},"role":"REVIEWER","approved":false,"status":"UNAPPROVED"},{"user":{"name":"rthoomu1","emailAddress":"rthoomu1@lenovo.com","id":8851,"displayName":"Ramesh Babu Thoomu1","active":true,"slug":"rthoomu1","type":"NORMAL","links":{"self":[{"href":"https://bitbucket.tc.lenovo.com/users/rthoomu1"}]}},"role":"REVIEWER","approved":false,"status":"UNAPPROVED"}],"participants":[],"links":{"self":[{"href":"https://bitbucket.tc.lenovo.com/projects/PMP/repos/pas-data-generation/pull-requests/269"}]}}}`))
-// 	ParsePR([]byte(`{"eventKey":"pr:modified","date":"2023-05-29T09:19:13-0401","actor":{"name":"kbabin","emailAddress":"kbabin@lenovo.com","id":8902,"displayName":"Konstantin Babin","active":true,"slug":"kbabin","type":"NORMAL","links":{"self":[{"href":"https://bitbucket.tc.lenovo.com/users/kbabin"}]}},"pullRequest":{"id":269,"version":0,"title":"DEV-9080 K8s update in Pen - test notification","state":"OPEN","open":true,"closed":false,"createdDate":1685366353203,"updatedDate":1685366353203,"fromRef":{"id":"refs/heads/feature/PMP-20074-create-scripts-to-initialize-and-update-the-demo-azfdemo-2023-05-17-na","displayId":"feature/PMP-20074-create-scripts-to-initialize-and-update-the-demo-azfdemo-2023-05-17-na","latestCommit":"9e4da367c66845f212567e839743694f6e8439f6","type":"BRANCH","repository":{"slug":"pas-data-generation","id":1006,"name":"pas-data-generation","hierarchyId":"bbd53dac7de24a3aee69","scmId":"git","state":"AVAILABLE","statusMessage":"Available","forkable":true,"project":{"key":"PMP","id":212,"name":"CSW LDI (Lenovo Device Intelligence)","description":"(Formerly PMP Predictive Maintenance)","public":false,"type":"NORMAL","links":{"self":[{"href":"https://bitbucket.tc.lenovo.com/projects/PMP"}]}},"public":false,"links":{"clone":[{"href":"https://bitbucket.tc.lenovo.com/scm/pmp/pas-data-generation.git","name":"http"},{"href":"ssh://git@bitbucket.tc.lenovo.com/pmp/pas-data-generation.git","name":"ssh"}],"self":[{"href":"https://bitbucket.tc.lenovo.com/projects/PMP/repos/pas-data-generation/browse"}]}}},"toRef":{"id":"refs/heads/develop","displayId":"develop","latestCommit":"b496d7bc5618fb20faeed7f9f4559fdde4d42adb","type":"BRANCH","repository":{"slug":"pas-data-generation","id":1006,"name":"pas-data-generation","hierarchyId":"bbd53dac7de24a3aee69","scmId":"git","state":"AVAILABLE","statusMessage":"Available","forkable":true,"project":{"key":"PMP","id":212,"name":"CSW LDI (Lenovo Device Intelligence)","description":"(Formerly PMP Predictive Maintenance)","public":false,"type":"NORMAL","links":{"self":[{"href":"https://bitbucket.tc.lenovo.com/projects/PMP"}]}},"public":false,"links":{"clone":[{"href":"https://bitbucket.tc.lenovo.com/scm/pmp/pas-data-generation.git","name":"http"},{"href":"ssh://git@bitbucket.tc.lenovo.com/pmp/pas-data-generation.git","name":"ssh"}],"self":[{"href":"https://bitbucket.tc.lenovo.com/projects/PMP/repos/pas-data-generation/browse"}]}}},"locked":false,"author":{"user":{"name":"kbabin","emailAddress":"kbabin@lenovo.com","id":8902,"displayName":"Konstantin Babin","active":true,"slug":"kbabin","type":"NORMAL","links":{"self":[{"href":"https://bitbucket.tc.lenovo.com/users/kbabin"}]}},"role":"AUTHOR","approved":false,"status":"UNAPPROVED"},"reviewers":[{"user":{"name":"svaladez","emailAddress":"svaladez@lenovo.com","id":1454,"displayName":"Sergio Valadez Cruz","active":true,"slug":"svaladez","type":"NORMAL","links":{"self":[{"href":"https://bitbucket.tc.lenovo.com/users/svaladez"}]}},"role":"REVIEWER","approved":false,"status":"UNAPPROVED"},{"user":{"name":"rthoomu1","emailAddress":"rthoomu1@lenovo.com","id":8851,"displayName":"Ramesh Babu Thoomu1","active":true,"slug":"rthoomu1","type":"NORMAL","links":{"self":[{"href":"https://bitbucket.tc.lenovo.com/users/rthoomu1"}]}},"role":"REVIEWER","approved":false,"status":"UNAPPROVED"}],"participants":[],"links":{"self":[{"href":"https://bitbucket.tc.lenovo.com/projects/PMP/repos/pas-data-generation/pull-requests/270"}]}}}`))
-// }
+const (
+	levelNone = iota
+	levelCrit
+	levelErr
+	levelWarn
+	levelInfo
+	levelDebug
+	levelTrace
+)
+
+func main() {
+	// override fiber encoder/decoder with one provided by goccy/go-json
+	app := fiber.New(fiber.Config{
+		JSONEncoder:           json.Marshal,
+		JSONDecoder:           json.Unmarshal,
+		DisableStartupMessage: true,
+	})
+
+	os.Setenv("RLOG_LOG_STREAM", "stdout")
+	rlog.UpdateEnv()
+	var logLevel string = os.Getenv("RLOG_LOG_LEVEL")
+	var traceLevelEnv string = os.Getenv("RLOG_TRACE_LEVEL")
+	var traceLevel int64
+	var teamsHost string = os.Getenv("TEAMS_HOSTNAME") // somecorp.webhook.office.com
+	if teamsHost == "" {
+		rlog.Critical("Mandatory environment variable TEAMS_HOSTNAME (FQDN from webhook) is not set. You can set it as localhost for development, exiting")
+		os.Exit(1)
+	} else {
+		rlog.Info("TEAMS_HOSTNAME: ", teamsHost)
+	}
+	if logLevel == "" {
+		logLevel = "INFO"
+	}
+	// If this variable is undefined, or set to -1 then no Trace messages are printed :
+	if traceLevelEnv == "" {
+		traceLevel = -1
+	} else {
+		x, err := strconv.ParseInt(traceLevelEnv, 10, 64)
+		if err != nil {
+			rlog.Criticalf("RLOG_TRACE_LEVEL value provided is not int64 type. Error : %s", err.Error())
+			os.Exit(1)
+		} else {
+			traceLevel = x
+		}
+	}
+	rlog.Infof("RLOG_LOG_LEVEL: %s; RLOG_TRACE_LEVEL: %d", logLevel, traceLevel)
+
+	app.Use(requestid.New(requestid.Config{
+		Next:       nil,
+		Header:     fiber.HeaderXRequestID,
+		Generator:  utils.UUIDv4,
+		ContextKey: "requestid",
+	}))
+
+	app.Use(logger.New(logger.Config{
+		TimeFormat: time.RFC3339,
+		Format:     "${time} ACCESS   : [${ip}]:${port} ${locals:requestid} ${status} - ${latency} ${bytesReceived} ${method} ${path}\n",
+	}))
+
+	app.Use(compress.New(compress.Config{
+		Next: func(c *fiber.Ctx) bool {
+			return c.Path() == "/healthz"
+		},
+		Level: compress.LevelBestSpeed, // 1
+	}))
+
+	type SomeStruct struct {
+		RequestID string
+	}
+
+	// GET /healthz
+	app.Get("/healthz", func(c *fiber.Ctx) error {
+		return c.SendStatus(204)
+	})
+
+	// POST /webhookb2/uid1@uid2/IncomingWebhook/uid3/uid4
+	app.Post("/webhookb2/:id1/IncomingWebhook/:id2/:id3", func(c *fiber.Ctx) error {
+		c.Accepts("application/json") // "application/json"
+		c.AcceptsEncodings("compress", "br")
+		data := SomeStruct{
+			RequestID: c.GetRespHeader("X-Request-Id"),
+		}
+		pathid1 := c.Params("id1")
+		pathid2 := c.Params("id2")
+		pathid3 := c.Params("id3")
+		rlog.Debugf("hook ids: %s, %s, %s ; body: %s \n", pathid1, pathid2, pathid3, c.Body())
+		notificationBody := ParsePR(c.Body())
+		rlog.Debugf("notificationBody : %s", notificationBody)
+		// send request to teams , curl -v -X POST -H 'Content-Type: application/json' 'https://somecorp.webhook.office.com/webhookb2/
+		a := fiber.AcquireAgent()
+		a.ContentType("application/json")
+		a.Host(teamsHost)
+		req := a.Request()
+		req.Header.SetMethod(fiber.MethodPost)
+		if errParse := a.Parse(); errParse != nil {
+			rlog.Critical("Error during Teams host parsing:" + errParse.Error())
+			os.Exit(1)
+		}
+		if isTraceLevel(traceLevel) {
+			a.Debug()
+		}
+
+		req.SetRequestURI(fmt.Sprintf("http://%s/webhookb2/%s/IncomingWebhook/%s/%s", teamsHost, pathid1, pathid2, pathid3))
+		a.Body(notificationBody)
+		a.Add("X-Request-Id", data.RequestID)
+		code, body, errs := a.String() // sending request to Teams host
+		// moved after RequestURI evaluated and sent because pathid1 was changing after changing Path :
+		if (logLevel != "DEBUG") && !(isTraceLevel(traceLevel)) {
+			// https://docs.gofiber.io/api/ctx#path :
+			// override Path with sha256 encoded webhook credentials
+			id1 := fmt.Sprintf("%x", sha256.Sum256([]byte(pathid1)))
+			id2 := fmt.Sprintf("%x", sha256.Sum256([]byte(pathid2)))
+			id3 := fmt.Sprintf("%x", sha256.Sum256([]byte(pathid3)))
+			newPath := fmt.Sprintf("/webhookb2/%s/IncomingWebhook/%s/%s", id1[0:7], id2[0:7], id3[0:7])
+			c.Path(newPath) // override to not log sensitive webhook parts
+		}
+		rlog.Infof("Notification sent to Teams, request Id: %s ; result code:%d", data.RequestID, code)
+		if code >= 400 {
+			rlog.Errorf("Teams API request (%s) failed with HTTP code: %d", data.RequestID, code)
+			return c.SendStatus(code)
+		}
+		rlog.Debugf("Notification response body:%s", body)
+		for i, e := range errs {
+			rlog.Errorf("Teams API request (%s) reported errors [%d]: %s \n", data.RequestID, i, e.Error())
+			c.SendStatus(504)
+		}
+		// if errs == nil {
+		// 	return c.JSON(data)
+		// }
+		return c.JSON(data)
+	})
+
+	go func() {
+		err := app.Listen(":8080")
+		if err != nil {
+			rlog.Criticalf("Listener on port 8080 error: %s", err.Error())
+			os.Exit(1)
+		}
+	}()
+
+	appHealth := fiber.New(fiber.Config{
+		DisableStartupMessage: true,
+	})
+	// GET /healthz
+	appHealth.Get("/healthz", func(c *fiber.Ctx) error {
+		return c.SendStatus(204)
+	})
+	errHealthz := appHealth.Listen(":9000")
+	if errHealthz != nil {
+		rlog.Criticalf("Listener on port 9000 error: %s", errHealthz.Error())
+		os.Exit(1)
+	}
+
+}

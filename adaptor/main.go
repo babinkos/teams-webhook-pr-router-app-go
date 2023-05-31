@@ -307,6 +307,10 @@ func main() {
 	var logLevel string = os.Getenv("RLOG_LOG_LEVEL")
 	var traceLevelEnv string = os.Getenv("RLOG_TRACE_LEVEL")
 	var traceLevel int64
+	var httpScheme string = os.Getenv("HTTP_SCHEME") // http (for local development) or https, default is https
+	if httpScheme == "" {
+		httpScheme = "https"
+	}
 	var teamsHost string = os.Getenv("TEAMS_HOSTNAME") // somecorp.webhook.office.com
 	if teamsHost == "" {
 		rlog.Critical("Mandatory environment variable TEAMS_HOSTNAME (FQDN from webhook) is not set. You can set it as localhost for development, exiting")
@@ -386,7 +390,7 @@ func main() {
 			a.Debug()
 		}
 
-		req.SetRequestURI(fmt.Sprintf("http://%s/webhookb2/%s/IncomingWebhook/%s/%s", teamsHost, pathid1, pathid2, pathid3))
+		req.SetRequestURI(fmt.Sprintf("%s://%s/webhookb2/%s/IncomingWebhook/%s/%s", httpScheme, teamsHost, pathid1, pathid2, pathid3))
 		a.Body(notificationBody)
 		a.Add("X-Request-Id", data.RequestID)
 		code, body, errs := a.String() // sending request to Teams host

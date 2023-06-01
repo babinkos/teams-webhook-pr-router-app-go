@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"crypto/tls"
 	"fmt"
 	"os"
 	"strconv"
@@ -16,6 +17,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/gofiber/fiber/v2/utils"
 	"github.com/romana/rlog"
+	"github.com/valyala/fasthttp"
 )
 
 type BitBucketUser struct {
@@ -311,6 +313,16 @@ func main() {
 	if httpScheme == "" {
 		httpScheme = "https"
 	}
+	var envTlsInsecureSkipVerify = os.Getenv("TLS_INSECURE_SKIP_VERIFY") // for testing we can ignore check for self-signed CA cert
+	var tlsInsecureSkipVerify bool = false
+	if envTlsInsecureSkipVerify != "" {
+		var parseBoolErr error
+		tlsInsecureSkipVerify, parseBoolErr = strconv.ParseBool(envTlsInsecureSkipVerify)
+		if parseBoolErr != nil {
+			rlog.Criticalf("Not a Boolean value in envvar TLS_INSECURE_SKIP_VERIFY: %s ; Error: %s", envTlsInsecureSkipVerify, parseBoolErr)
+			os.Exit(1)
+		}
+	}
 	var teamsHost string = os.Getenv("TEAMS_HOSTNAME") // somecorp.webhook.office.com
 	if teamsHost == "" {
 		rlog.Critical("Mandatory environment variable TEAMS_HOSTNAME (FQDN from webhook) is not set. You can set it as localhost for development, exiting")
@@ -333,7 +345,7 @@ func main() {
 			traceLevel = x
 		}
 	}
-	rlog.Infof("RLOG_LOG_LEVEL: %s; RLOG_TRACE_LEVEL: %d", logLevel, traceLevel)
+	rlog.Infof("RLOG_LOG_LEVEL: %s; RLOG_TRACE_LEVEL: %d; TLS_INSECURE_SKIP_VERIFY: %t", logLevel, traceLevel, tlsInsecureSkipVerify)
 
 	app.Use(requestid.New(requestid.Config{
 		Next:       nil,
@@ -377,23 +389,28 @@ func main() {
 		notificationBody := ParsePR(c.Body())
 		rlog.Debugf("notificationBody : %s", notificationBody)
 		// send request to teams , curl -v -X POST -H 'Content-Type: application/json' 'https://somecorp.webhook.office.com/webhookb2/
-		a := fiber.AcquireAgent()
-		a.ContentType("application/json")
-		a.Host(teamsHost)
-		req := a.Request()
-		req.Header.SetMethod(fiber.MethodPost)
-		if errParse := a.Parse(); errParse != nil {
-			rlog.Critical("Error during Teams host parsing:" + errParse.Error())
-			os.Exit(1)
+		// Setup HTTPS client
+		tlsConfig := &tls.Config{
+			Certificates:       []tls.Certificate{},
+			InsecureSkipVerify: tlsInsecureSkipVerify,
 		}
-		if isTraceLevel(traceLevel) {
-			a.Debug()
+		teamsURI := fmt.Sprintf("%s://%s/webhookb2/%s/IncomingWebhook/%s/%s", httpScheme, teamsHost, pathid1, pathid2, pathid3)
+		req := fasthttp.AcquireRequest()
+		defer fasthttp.ReleaseRequest(req)
+		req.SetRequestURI(teamsURI)
+		req.Header.SetMethod("POST")
+		req.Header.Add("X-Request-Id", data.RequestID)
+		req.Header.Set("Content-encoding", "application/json")
+		req.SetBody(notificationBody)
+		resp := fasthttp.AcquireResponse()
+		defer fasthttp.ReleaseResponse(resp)
+		client := &fasthttp.Client{
+			TLSConfig: tlsConfig,
 		}
+		errs := client.Do(req, resp) // sending request to Teams host
+		code := resp.StatusCode()
+		body := resp.Body()
 
-		req.SetRequestURI(fmt.Sprintf("%s://%s/webhookb2/%s/IncomingWebhook/%s/%s", httpScheme, teamsHost, pathid1, pathid2, pathid3))
-		a.Body(notificationBody)
-		a.Add("X-Request-Id", data.RequestID)
-		code, body, errs := a.String() // sending request to Teams host
 		// moved after RequestURI evaluated and sent because pathid1 was changing after changing Path :
 		if (logLevel != "DEBUG") && !(isTraceLevel(traceLevel)) {
 			// https://docs.gofiber.io/api/ctx#path :
@@ -404,19 +421,17 @@ func main() {
 			newPath := fmt.Sprintf("/webhookb2/%s/IncomingWebhook/%s/%s", id1[0:7], id2[0:7], id3[0:7])
 			c.Path(newPath) // override to not log sensitive webhook parts
 		}
+
 		rlog.Infof("Notification sent to Teams, request Id: %s ; result code:%d", data.RequestID, code)
 		if code >= 400 {
 			rlog.Errorf("Teams API request (%s) failed with HTTP code: %d", data.RequestID, code)
 			return c.SendStatus(code)
 		}
 		rlog.Debugf("Notification response body:%s", body)
-		for i, e := range errs {
-			rlog.Errorf("Teams API request (%s) reported errors [%d]: %s \n", data.RequestID, i, e.Error())
+		if errs != nil {
+			rlog.Errorf("Teams API request (%s) reported error: %s \n", data.RequestID, errs.Error())
 			c.SendStatus(504)
 		}
-		// if errs == nil {
-		// 	return c.JSON(data)
-		// }
 		return c.JSON(data)
 	})
 

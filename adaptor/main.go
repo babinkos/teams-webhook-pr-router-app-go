@@ -201,7 +201,7 @@ type TeamsMsgAttachement struct {
 		Type    string         `default:"AdaptiveCard" json:"type"`
 		Body    []TeamsMsgBody `json:"body"`
 		Schema  string         `default:"http://adaptivecards.io/schemas/adaptive-card.json" json:"$schema"`
-		Version string         `default:"1.2" json:"version"`
+		Version string         `default:"1.0" json:"version"`
 		Msteams struct {
 			Width    string               `default:"Full" json:"width"`
 			Entities ReviewerEntitiesList `json:"entities"`
@@ -230,27 +230,42 @@ func ParsePR(eventJson []byte) []byte {
 		rlog.Criticalf("Error Unmarshalling payload JSON : %s", err.Error())
 		os.Exit(1)
 	}
+	rlog.Tracef(0, "inventory : %+v\n", inventory)
 	var reviewersList string = ""
 	var reviewersEntity ReviewerEntity
 	var reviewersEntityList ReviewerEntitiesList
 	reviewersEntity.Type = "mention"
-	for _, val := range inventory.PullRequest.Reviewers {
-		text := "<at>" + val.User.Name + " UPN</at>"
-		reviewersList += text + ", "
-		reviewersEntity.Text = text
-		reviewersEntity.Mentioned.ID = val.User.EmailAddress
-		reviewersEntity.Mentioned.Name = val.User.DisplayName
-		reviewersEntityList = append(reviewersEntityList, reviewersEntity)
+	if len(inventory.PullRequest.Reviewers) == 0 {
+		rlog.Errorf("Reviewers count is 0")
+	} else {
+		for _, val := range inventory.PullRequest.Reviewers {
+			text := "<at>" + val.User.Name + " UPN</at>"
+			reviewersList += text + ", "
+			reviewersEntity.Text = text
+			reviewersEntity.Mentioned.ID = val.User.EmailAddress
+			reviewersEntity.Mentioned.Name = val.User.DisplayName
+			reviewersEntityList = append(reviewersEntityList, reviewersEntity)
+		}
 	}
 	reviewersEntity.Mentioned.ID = inventory.PullRequest.Author.User.EmailAddress
 	reviewersEntity.Mentioned.Name = inventory.PullRequest.Author.User.DisplayName
 	reviewersEntity.Text = "<at>" + inventory.PullRequest.Author.User.Name + " UPN</at>"
 	reviewersEntityList = append(reviewersEntityList, reviewersEntity) // add PR author to mentions format
 	reviewersList = strings.TrimRight(reviewersList, ", ")
-	rlog.Tracef(0, "%+v\n", reviewersEntityList)
-	bodyText := fmt.Sprintf("Hi Team, %s %s a PR, please review: [%s](%s) \n\n", reviewersEntity.Text, strings.TrimLeft(inventory.EventKey, "pr:"), inventory.PullRequest.Title, inventory.PullRequest.Links.Self[0].Href)
+	rlog.Tracef(0, "reviewersEntityList : %+v\n", reviewersEntityList)
+
+	var prAction string = ""
+	switch strings.TrimLeft(inventory.EventKey, "pr:") {
+	case "opened":
+		prAction = "opened a PR"
+
+	case "from_ref_updated":
+		prAction = "updated source branch in PR"
+	}
+
+	bodyText := fmt.Sprintf("Hi Team, %s %s, please review: [%s](%s) \n\n", reviewersEntity.Text, prAction, inventory.PullRequest.Title, inventory.PullRequest.Links.Self[0].Href)
 	bodyText += fmt.Sprintf("CC: %s", reviewersList)
-	rlog.Tracef(0, "%s \n", bodyText)
+	rlog.Tracef(0, "bodyText : %s \n", bodyText)
 
 	var msg TeamsMsg
 	msg.Type = "message"
@@ -265,11 +280,12 @@ func ParsePR(eventJson []byte) []byte {
 	// msgBody.Size = "Medium"
 	// msgBody.Weight = "Bolder"
 	msgBody.Text = bodyText
+	msgBody.Wrap = true
 	msgBodyList = append(msgBodyList, msgBody)
 
 	msgAttachement.Content.Body = msgBodyList
 	msgAttachement.Content.Schema = "http://adaptivecards.io/schemas/adaptive-card.json"
-	msgAttachement.Content.Version = "1.2"
+	msgAttachement.Content.Version = "1.0"
 	msgAttachement.Content.Msteams.Width = "Full"
 	msgAttachement.Content.Msteams.Entities = reviewersEntityList
 

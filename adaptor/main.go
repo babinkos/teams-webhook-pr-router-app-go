@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -420,17 +419,17 @@ func main() {
 			errMsg := "Request Body is nil"
 			rlog.Debug(errMsg)
 			c.Set("Content-Type", "text/plain")
-			return c.Status(406).SendString("Error: " + errMsg)
-		} else if reflect.DeepEqual(c.Body(), []byte("")) {
+			return c.Status(400).SendString("Error: " + errMsg)
+		} else if bytes.Equal(c.Body(), []byte("")) {
 			errMsg := "Request Body is empty"
 			rlog.Debug(errMsg)
 			c.Set("Content-Type", "text/plain")
-			return c.Status(406).SendString("Error: " + errMsg)
+			return c.Status(400).SendString("Error: " + errMsg)
 		}
 
 		var notificationBody []byte
-
-		if reflect.DeepEqual(c.Body(), []byte("{\"test\": true}")) {
+		// TODO : parse JSON and check jsonpath : .test=true
+		if bytes.Equal(c.Body(), []byte("{\"test\": true}")) {
 			rlog.Debug("Request was Test ping ")
 			notificationBody = c.Body()
 			c.Set("Content-Type", "text/plain")
@@ -445,7 +444,7 @@ func main() {
 				errMsg := fmt.Sprintf("JSON parsing error was: %s", parseErr.Error())
 				rlog.Error(errMsg)
 				c.Set("Content-Type", "text/plain")
-				return c.Status(406).SendString("Error: " + errMsg)
+				return c.Status(400).SendString("Error: " + errMsg)
 			}
 		}
 

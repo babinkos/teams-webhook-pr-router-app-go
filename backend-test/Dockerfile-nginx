@@ -1,5 +1,5 @@
 FROM docker.io/nginx:bookworm
 
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY nginx.template /etc/nginx/templates/my-site.conf.template
 COPY certs/public_user.crt /etc/ssl/certs/public_user.crt
 COPY certs/privkey_user.pem /etc/ssl/private/privkey_user.pem

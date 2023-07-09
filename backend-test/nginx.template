@@ -1,14 +1,7 @@
-worker_processes 1;
-
-events { worker_connections 1024; }
-
-http {
-
-    sendfile on;
     large_client_header_buffers 4 32k;
 
     upstream web-api {
-        server localhost:80;
+        server ${HOST}:80;
     }
 
     server {
@@ -35,4 +28,3 @@ http {
             proxy_busy_buffers_size     256k;
         }
     }
-}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"reflect"
 
 	"github.com/goccy/go-json"
 	"github.com/gofiber/fiber/v2"
@@ -62,7 +63,7 @@ func main() {
 		c.Accepts("application/json") // "application/json"
 		c.AcceptsEncodings("compress", "br")
 		data := SomeStruct{
-			RequestID: fmt.Sprintf("%s", c.GetRespHeader("X-Request-Id")),
+			RequestID: c.GetRespHeader("X-Request-Id"),
 		}
 
 		if logLevel != "DEBUG" {
@@ -75,8 +76,16 @@ func main() {
 			c.Path(newPath)
 		}
 
-		rlog.Debug(fmt.Sprintf("hook ids: %s, %s, %s ; body: %s", c.Params("id1"), c.Params("id2"), c.Params("id3"), c.Body()))
-		return c.JSON(data)
+		rlog.Debugf("hook ids: %s, %s, %s ; body: %s", c.Params("id1"), c.Params("id2"), c.Params("id3"), c.Body())
+
+		if reflect.DeepEqual(c.Body(), []byte("{\"test\": true}")) {
+			rlog.Debug("Request was Test ping ")
+			c.Set("Content-Type", "text/plain")
+			return c.SendString("ok")
+		} else {
+			c.Set("Content-Type", "application/json")
+			return c.JSON(data)
+		}
 		// return c.SendStatus(200)
 	})
 

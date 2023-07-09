@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -224,11 +226,12 @@ func (t *TeamsMsg) NonEscapedJSON() ([]byte, error) {
 }
 
 // Parse BitBucket PR event json payload, maps data to build Teams notification webhook json
-func ParsePR(eventJson []byte) []byte {
+func ParsePR(eventJson []byte) ([]byte, error) {
 	var inventory BitBucketPREvent
 	if err := json.Unmarshal([]byte(eventJson), &inventory); err != nil {
-		rlog.Criticalf("Error Unmarshalling payload JSON : %s", err.Error())
-		os.Exit(1)
+		errMsg := fmt.Sprintf("Error Unmarshalling payload JSON : %s", err.Error())
+		rlog.Error(errMsg)
+		return []byte(""), errors.New(errMsg)
 	}
 	rlog.Tracef(0, "inventory : %+v\n", inventory)
 	var reviewersList string = ""
@@ -254,13 +257,14 @@ func ParsePR(eventJson []byte) []byte {
 	reviewersList = strings.TrimRight(reviewersList, ", ")
 	rlog.Tracef(0, "reviewersEntityList : %+v\n", reviewersEntityList)
 
-	var prAction string = ""
+	var prAction string
 	switch strings.TrimLeft(inventory.EventKey, "pr:") {
 	case "opened":
 		prAction = "opened a PR"
-
 	case "from_ref_updated":
 		prAction = "updated source branch in PR"
+	default:
+		prAction = "(PR EventKey: " + inventory.EventKey + ")"
 	}
 
 	bodyText := fmt.Sprintf("Hi Team, %s %s, please review: [%s](%s) \n\n", reviewersEntity.Text, prAction, inventory.PullRequest.Title, inventory.PullRequest.Links.Self[0].Href)
@@ -277,8 +281,6 @@ func ParsePR(eventJson []byte) []byte {
 	var msgBodyList []TeamsMsgBody
 	var msgBody TeamsMsgBody
 	msgBody.Type = "TextBlock"
-	// msgBody.Size = "Medium"
-	// msgBody.Weight = "Bolder"
 	msgBody.Text = bodyText
 	msgBody.Wrap = true
 	msgBodyList = append(msgBodyList, msgBody)
@@ -295,7 +297,7 @@ func ParsePR(eventJson []byte) []byte {
 	if err != nil {
 		rlog.Errorf("NonEscapedJSON error: %s", err.Error())
 	}
-	return b
+	return b, nil
 }
 
 func isTraceLevel(tLevel int64) bool {
@@ -398,12 +400,11 @@ func main() {
 		data := SomeStruct{
 			RequestID: c.GetRespHeader("X-Request-Id"),
 		}
+		rlog.Debugf("X-Request-Id : %s", data.RequestID)
 		pathid1 := c.Params("id1")
 		pathid2 := c.Params("id2")
 		pathid3 := c.Params("id3")
 		rlog.Debugf("hook ids: %s, %s, %s ; body: %s \n", pathid1, pathid2, pathid3, c.Body())
-		notificationBody := ParsePR(c.Body())
-		rlog.Debugf("notificationBody : %s", notificationBody)
 		// send request to teams , curl -v -X POST -H 'Content-Type: application/json' 'https://somecorp.webhook.office.com/webhookb2/
 		// Setup HTTPS client
 		tlsConfig := &tls.Config{
@@ -414,9 +415,43 @@ func main() {
 		req := fasthttp.AcquireRequest()
 		defer fasthttp.ReleaseRequest(req)
 		req.SetRequestURI(teamsURI)
+		// don't parse further if body don't exist or empty string : without -d or curl -d ''
+		if (c.Body()) == nil {
+			errMsg := "Request Body is nil"
+			rlog.Debug(errMsg)
+			c.Set("Content-Type", "text/plain")
+			return c.Status(406).SendString("Error: " + errMsg)
+		} else if reflect.DeepEqual(c.Body(), []byte("")) {
+			errMsg := "Request Body is empty"
+			rlog.Debug(errMsg)
+			c.Set("Content-Type", "text/plain")
+			return c.Status(406).SendString("Error: " + errMsg)
+		}
+
+		var notificationBody []byte
+
+		if reflect.DeepEqual(c.Body(), []byte("{\"test\": true}")) {
+			rlog.Debug("Request was Test ping ")
+			notificationBody = c.Body()
+			c.Set("Content-Type", "text/plain")
+			return c.Status(200).SendString("ok")
+		} else {
+			var parseErr error
+			notificationBody, parseErr = ParsePR(c.Body())
+			if parseErr == nil {
+				rlog.Debugf("notificationBody : %s", notificationBody)
+				c.Set("Content-Type", "application/json")
+			} else {
+				errMsg := fmt.Sprintf("JSON parsing error was: %s", parseErr.Error())
+				rlog.Error(errMsg)
+				c.Set("Content-Type", "text/plain")
+				return c.Status(406).SendString("Error: " + errMsg)
+			}
+		}
+
 		req.Header.SetMethod("POST")
 		req.Header.Add("X-Request-Id", data.RequestID)
-		req.Header.Set("Content-encoding", "application/json")
+		req.Header.Set("Content-Type", "application/json")
 		req.SetBody(notificationBody)
 		resp := fasthttp.AcquireResponse()
 		defer fasthttp.ReleaseResponse(resp)
@@ -440,15 +475,19 @@ func main() {
 
 		rlog.Infof("Notification sent to Teams, request Id: %s ; result code:%d", data.RequestID, code)
 		if code >= 400 {
-			rlog.Errorf("Teams API request (%s) failed with HTTP code: %d", data.RequestID, code)
-			return c.SendStatus(code)
+			errMsg := fmt.Sprintf("Teams API request (%s) failed with HTTP code: %d", data.RequestID, code)
+			rlog.Error(errMsg)
+			c.Set("Content-Type", "text/plain")
+			return c.Status(code).SendString("Error: " + errMsg)
 		}
 		rlog.Debugf("Notification response body:%s", body)
 		if errs != nil {
-			rlog.Errorf("Teams API request (%s) reported error: %s \n", data.RequestID, errs.Error())
-			c.SendStatus(504)
+			errMsg := fmt.Sprintf("Teams API request (%s) reported error: %s \n", data.RequestID, errs.Error())
+			rlog.Error(errMsg)
+			c.Set("Content-Type", "text/plain")
+			return c.Status(504).SendString("Error: " + errMsg)
 		}
-		return c.JSON(data)
+		return c.Send(body)
 	})
 
 	go func() {

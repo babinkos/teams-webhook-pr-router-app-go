@@ -14,6 +14,8 @@ cd adaptor
 
 docker run -it --rm -e "TEAMS_HOSTNAME=$(hostname -I | cut -d' ' -f1)" -e RLOG_LOG_LEVEL=INFO -e TLS_INSECURE_SKIP_VERIFY=false -p 8080:8080 docker.io/library/adaptor
 
-curl -v -X POST -H 'Content-Type: application/json' -H "X-Request-Id: $(uuidgen)" "http://127.0.0.1:8080/webhookb2/$(uuidgen)@$(uuidgen)/IncomingWebhook/$(openssl rand -hex 16)/$(uuidgen)" -d @bb-hook-event.json
+cd ..
+
+curl -v -X POST -H 'Content-Type: application/json' -H "X-Request-Id: $(uuidgen)" "http://127.0.0.1:8080/webhookb2/$(uuidgen)@$(uuidgen)/IncomingWebhook/$(openssl rand -hex 16)/$(uuidgen)" -d @backend-test/bb-event.json
 
 ```

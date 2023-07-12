@@ -404,6 +404,17 @@ func main() {
 		pathid2 := c.Params("id2")
 		pathid3 := c.Params("id3")
 		rlog.Debugf("hook ids: %s, %s, %s ; body: %s \n", pathid1, pathid2, pathid3, c.Body())
+
+		var newPath string = ""
+		if (logLevel != "DEBUG") && !(isTraceLevel(traceLevel)) {
+			// https://docs.gofiber.io/api/ctx#path :
+			// override Path with sha256 encoded webhook credentials
+			id1 := fmt.Sprintf("%x", sha256.Sum256([]byte(pathid1)))
+			id2 := fmt.Sprintf("%x", sha256.Sum256([]byte(pathid2)))
+			id3 := fmt.Sprintf("%x", sha256.Sum256([]byte(pathid3)))
+			newPath = fmt.Sprintf("/webhookb2/%s/IncomingWebhook/%s/%s", id1[0:7], id2[0:7], id3[0:7])
+		}
+
 		// send request to teams , curl -v -X POST -H 'Content-Type: application/json' 'https://somecorp.webhook.office.com/webhookb2/
 		// Setup HTTPS client
 		tlsConfig := &tls.Config{
@@ -418,12 +429,18 @@ func main() {
 		if (c.Body()) == nil {
 			errMsg := "Request Body is nil"
 			rlog.Debug(errMsg)
-			c.Set("Content-Type", "text/plain")
+			c.Set("Content-Type", "text/plain; charset=utf-8")
+			if (logLevel != "DEBUG") && !(isTraceLevel(traceLevel)) {
+				c.Path(newPath) // override to not log sensitive webhook parts
+			}
 			return c.Status(400).SendString("Error: " + errMsg)
 		} else if bytes.Equal(c.Body(), []byte("")) {
 			errMsg := "Request Body is empty"
 			rlog.Debug(errMsg)
-			c.Set("Content-Type", "text/plain")
+			c.Set("Content-Type", "text/plain; charset=utf-8")
+			if (logLevel != "DEBUG") && !(isTraceLevel(traceLevel)) {
+				c.Path(newPath) // override to not log sensitive webhook parts
+			}
 			return c.Status(400).SendString("Error: " + errMsg)
 		}
 
@@ -432,7 +449,10 @@ func main() {
 		if bytes.Equal(c.Body(), []byte("{\"test\": true}")) {
 			rlog.Debug("Request was Test ping ")
 			notificationBody = c.Body()
-			c.Set("Content-Type", "text/plain")
+			c.Set("Content-Type", "text/plain; charset=utf-8")
+			if (logLevel != "DEBUG") && !(isTraceLevel(traceLevel)) {
+				c.Path(newPath) // override to not log sensitive webhook parts
+			}
 			return c.Status(200).SendString("ok")
 		} else {
 			var parseErr error
@@ -443,7 +463,10 @@ func main() {
 			} else {
 				errMsg := fmt.Sprintf("JSON parsing error was: %s", parseErr.Error())
 				rlog.Error(errMsg)
-				c.Set("Content-Type", "text/plain")
+				c.Set("Content-Type", "text/plain; charset=utf-8")
+				if (logLevel != "DEBUG") && !(isTraceLevel(traceLevel)) {
+					c.Path(newPath) // override to not log sensitive webhook parts
+				}
 				return c.Status(400).SendString("Error: " + errMsg)
 			}
 		}
@@ -460,15 +483,14 @@ func main() {
 		errs := client.Do(req, resp) // sending request to Teams host
 		code := resp.StatusCode()
 		body := resp.Body()
+		var respHeader fasthttp.ResponseHeader
+		resp.Header.CopyTo(&respHeader)
 
 		// moved after RequestURI evaluated and sent because pathid1 was changing after changing Path :
 		if (logLevel != "DEBUG") && !(isTraceLevel(traceLevel)) {
 			// https://docs.gofiber.io/api/ctx#path :
 			// override Path with sha256 encoded webhook credentials
-			id1 := fmt.Sprintf("%x", sha256.Sum256([]byte(pathid1)))
-			id2 := fmt.Sprintf("%x", sha256.Sum256([]byte(pathid2)))
-			id3 := fmt.Sprintf("%x", sha256.Sum256([]byte(pathid3)))
-			newPath := fmt.Sprintf("/webhookb2/%s/IncomingWebhook/%s/%s", id1[0:7], id2[0:7], id3[0:7])
+			// newPath concatenation moved earlier to meet early exit path logging adjustments
 			c.Path(newPath) // override to not log sensitive webhook parts
 		}
 
@@ -476,14 +498,22 @@ func main() {
 		if code >= 400 {
 			errMsg := fmt.Sprintf("Teams API request (%s) failed with HTTP code: %d", data.RequestID, code)
 			rlog.Error(errMsg)
-			c.Set("Content-Type", "text/plain")
+			c.Set("Content-Type", "text/plain; charset=utf-8")
 			return c.Status(code).SendString("Error: " + errMsg)
 		}
-		rlog.Debugf("Notification response body:%s", body)
+		rlog.Debugf("Notification response body: %s", body)
+		respContType := respHeader.ContentType()
+		if respContType != nil {
+			rlog.Debugf("Notification response header contentType: %s", respContType)
+		}
+		respEnc := respHeader.ContentEncoding()
+		if respEnc != nil {
+			rlog.Debugf("Notification response header contentEncoding: %s", respEnc)
+		}
 		if errs != nil {
 			errMsg := fmt.Sprintf("Teams API request (%s) reported error: %s \n", data.RequestID, errs.Error())
 			rlog.Error(errMsg)
-			c.Set("Content-Type", "text/plain")
+			c.Set("Content-Type", "text/plain; charset=utf-8")
 			return c.Status(504).SendString("Error: " + errMsg)
 		}
 		return c.Send(body)

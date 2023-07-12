@@ -1,0 +1,33 @@
+{
+    "type": "message",
+    "attachments": [
+        {
+            "contentType": "application/vnd.microsoft.card.adaptive",
+            "content": {
+                "type": "AdaptiveCard",
+                "body": [
+                    {
+                        "type": "TextBlock",
+                        "text": "Hi Team, <at>admin UPN</at> opened a PR, please review: [a new file added]() \n\nCC: ",
+                        "wrap": true
+                    }
+                ],
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "version": "1.0",
+                "msteams": {
+                    "width": "Full",
+                    "entities": [
+                        {
+                            "type": "mention",
+                            "text": "<at>admin UPN</at>",
+                            "mentioned": {
+                                "id": "admin@example.com",
+                                "name": "Administrator"
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    ]
+}
